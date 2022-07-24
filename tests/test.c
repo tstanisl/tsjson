@@ -42,6 +42,7 @@ struct tsjson {
 	size_t capacity;
 	size_t pos;
 	int line, col;
+	bool oom;
 	char err[128];
 };
 
@@ -58,6 +59,21 @@ static void tsjson__consume(tsjson *t) {
 static void tsjson__skipws(tsjson* t) {
 	while (isspace(t->next))
 		tsjson__consume(t);
+}
+
+static void tsjson_puts(tsjson* t, int c) {
+	if (t->pos >= t->capacity) {
+		size_t capacity_ = (3u * t->capacity / 2u + 64u) / 64u * 64u;
+		void *buffer_ = realloc(t->buffer, capacity_);
+		if (!buffer_) {
+			t->oom = 1;
+			return;
+		}
+		t->buffer = buffer_;
+		t->capacity = capacity_;
+	}
+
+	t->buffer[t->pos++] = c;
 }
 
 static void tsjson__parse_literal(tsjson* t, tsjson_token *tok, const char *str) {
@@ -82,26 +98,26 @@ static void tsjson__parse_string(tsjson* t, tsjson_token *tok) {
 		if      (t->next == '"') {
 			tsjson_consume(t); // "
 			// push null terminator
-			tsjson_putc(tok, 0);
+			tsjson_putc(t, 0);
 			tok->str.data = t->buffer;
 			tok->str.len = t->pos;
 			return;
 		else if (t->next == '\\') {
 			tsjson_consume();
 			if        (t->next == 'b') {
-				tsjson_putc(tok, '\b');
+				tsjson_putc(t, '\b');
 			} else if (t->next == 'n') {
-				tsjson_putc(tok, '\n');
+				tsjson_putc(t, '\n');
 			} else if (t->next == 'r') {
-				tsjson_putc(tok, '\r');
+				tsjson_putc(t, '\r');
 			} else if (t->next == 'f') {
-				tsjson_putc(tok, '\f');
+				tsjson_putc(t, '\f');
 			} else if (t->next == '\\') {
-				tsjson_putc(tok, '\\');
+				tsjson_putc(t, '\\');
 			} else if (t->next == '/') {
-				tsjson_putc(tok, '/');
+				tsjson_putc(t, '/');
 			} else if (t->next == '"') {
-				tsjson_putc(tok, '\"');
+				tsjson_putc(t, '\"');
 			} else if (t->next == 'u' || t->next == 'U') {
 				tsjson_error(t, tok, "unicode is not supported yet... sorry");
 			} else {
@@ -110,9 +126,51 @@ static void tsjson__parse_string(tsjson* t, tsjson_token *tok) {
 		} else if (t->next == EOF) {
 			tsjson_error(t, tok, "unexpected end of file");
 		} else {
-			tsjson_putc(tok, t->next);
+			tsjson_putc(t, t->next);
 		}
 	} while (tok->tag != TSJSON_ERROR);
+}
+
+static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
+	t->pos = 0;
+	if (tok->next == '-') {
+		tsjson_putc(t, '-');
+		tsjson_consume(t);
+	}
+	if (tok->next == '0') {
+		tsjson_putc(t, '0');
+	} else (isdigit(t->next)) {
+		do tsjson_putc(t, tok->next);
+		while (isdigit(t->next));
+	} else {
+		tsjson_error(t, tok, "expected a digit");
+	}
+	if (tok->next == '.') {
+		tsjson_putc(t, '.');
+		while (isdigit(t->next))
+			tsjson_putc(t, '.');
+	}
+	if (tok->next == 'e' || tok->next == 'E') {
+		tsjson_putc(t, 'e');
+		tsjson_consume(t); // eE
+		if (t->next == '+' || t->next == '-') {
+			tsjson_putc(t, t->next);
+			tsjson_consume(t); // +/-
+			if (!isdigit(t->next)) {
+				tsjson_error(t, tok, "Expected exponent");
+				return;
+			}
+			do tsjson_putc(t, tok->next);
+			while (isdigit(t->next));
+		}
+	}
+	tsjson_putc(t, 0);
+	double num;
+	if (sscanf(t->buffer, "%lf", &num) != 1) {
+		tsjson_error(t, tok, "failed to parse '%s'", t->buffer);
+		return;
+	}
+	tok->num = num;
 }
 
 int tsjson_parse_value(tsjson* t, tsjson_token *tok) {
