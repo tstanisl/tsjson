@@ -35,19 +35,33 @@ tsjson* tsjson_create(const char *path);
 void tsjson_destroy(tsjson*);
 int tsjson_fetch(tsjson*, tsjson_token*);
 
+enum {
+	TSJSON_ST_EOF = EOF,
+	TSJSON_ST_FILE_ERROR = -2,
+	TSJSON_ST_OUT_OF_MEMORY = -3,
+	TSJSON_ST_SYNTAX_ERROR = -4,
+};
+
 struct tsjson {
 	FILE *flp;
-	int next;
 	char *buffer;
 	size_t capacity;
 	size_t pos;
+	//enum tsjson_state state;
+	int next;
 	int line, col;
-	bool oom;
 	char err[128];
 };
 
-static void tsjson__consume(tsjson *t) {
+static void tsjson_consume(tsjson *t) {
+	if (t->next < 0)
+		return;
 	t->next = fgetc(t->flp);
+	if (t->next == EOF) {
+		if (ferror(t->flp))
+			t->next = TSJSON_ST_FILE_ERROR;
+		return;
+	}
 	if (t->next == '\n') {
 		++t->line;
 		t->col = 1;
@@ -57,16 +71,16 @@ static void tsjson__consume(tsjson *t) {
 }
 
 static void tsjson__skipws(tsjson* t) {
-	while (isspace(t->next))
-		tsjson__consume(t);
+	while (tsjson_isspace(t->next))
+		tsjson_consume(t);
 }
 
-static void tsjson_puts(tsjson* t, int c) {
+static void tsjson_putc(tsjson* t, int c) {
 	if (t->pos >= t->capacity) {
 		size_t capacity_ = (3u * t->capacity / 2u + 64u) / 64u * 64u;
 		void *buffer_ = realloc(t->buffer, capacity_);
 		if (!buffer_) {
-			t->oom = 1;
+			t->state = TSJSON_ST_OUT_OF_MEMORY;
 			return;
 		}
 		t->buffer = buffer_;
@@ -76,20 +90,33 @@ static void tsjson_puts(tsjson* t, int c) {
 	t->buffer[t->pos++] = c;
 }
 
+static int tsjson_error(tsjson* t, const char* fmt, ...) {
+	if (t->next >= EOF) {
+		va_list va;
+		va_start(va, fmt);
+		vsnprintf(t->err, sizeof t->err, fmt, va);
+		va_end(va);
+		t->next = TSJSON_ST_SYNTAX_ERROR;
+	}
+	return -1;
+}
+
+static in
+
 static void tsjson__parse_literal(tsjson* t, tsjson_token *tok, const char *str) {
 	const char *s = str;
-	while (*s && *s == t->next) {
+	while (t->next >= 0 && *s && *s == t->next) {
 		tsjson_consume(t);
 		++s;
 	}
-	if (*s == 0 && (t->next == EOF || isspace(t->next)))
+	if (*s == 0 && (t->next == EOF || tsjson_isspace(t->next)))
 		return;
-	tok_error(t, tok, "expected '%s'", str);
+	tok_error(t, "expected '%s'", str);
 }
 
 static void tsjson__parse_string(tsjson* t, tsjson_token *tok) {
 	if (t->next != '"') {
-		tok_error(t, tok, "expected string starting with '\"'");
+		tok_error(t, "expected string starting with '\"'");
 		return;
 	}
 	tsjson_consume(t); // "
@@ -124,11 +151,11 @@ static void tsjson__parse_string(tsjson* t, tsjson_token *tok) {
 				tsjson_error(t, tok, "invalid escaped character '%c'", t->next);
 			}
 		} else if (t->next == EOF) {
-			tsjson_error(t, tok, "unexpected end of file");
+			tsjson_error(t, "unexpected end of file");
 		} else {
 			tsjson_putc(t, t->next);
 		}
-	} while (tok->tag != TSJSON_ERROR);
+	} while (tok->next >= 0);
 }
 
 static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
@@ -139,15 +166,15 @@ static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
 	}
 	if (tok->next == '0') {
 		tsjson_putc(t, '0');
-	} else (isdigit(t->next)) {
+	} else (tsjson_isdigit(t->next)) {
 		do tsjson_putc(t, tok->next);
-		while (isdigit(t->next));
-	} else {
-		tsjson_error(t, tok, "expected a digit");
+		while (tsjson_isdigit(t->next));
+	} else (t->next >= 0) {
+		tsjson_error(t, "expected a digit");
 	}
 	if (tok->next == '.') {
 		tsjson_putc(t, '.');
-		while (isdigit(t->next))
+		while (tsjson_isdigit(t->next))
 			tsjson_putc(t, '.');
 	}
 	if (tok->next == 'e' || tok->next == 'E') {
@@ -156,21 +183,21 @@ static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
 		if (t->next == '+' || t->next == '-') {
 			tsjson_putc(t, t->next);
 			tsjson_consume(t); // +/-
-			if (!isdigit(t->next)) {
-				tsjson_error(t, tok, "Expected exponent");
+			if (!tsjson_isdigit(t->next)) {
+				tsjson_error(t, "Expected exponent");
 				return;
 			}
 			do tsjson_putc(t, tok->next);
-			while (isdigit(t->next));
+			while (tsjson_isdigit(t->next));
 		}
 	}
 	tsjson_putc(t, 0);
 	double num;
-	if (sscanf(t->buffer, "%lf", &num) != 1) {
-		tsjson_error(t, tok, "failed to parse '%s'", t->buffer);
-		return;
+	if (t->next >= EOF && sscanf(t->buffer, "%lf", &num) != 1) {
+		tsjson_error(t, "failed to parse a number from '%s'", t->buffer);
+	} else {
+		tok->num = num;
 	}
-	tok->num = num;
 }
 
 int tsjson_parse_value(tsjson* t, tsjson_token *tok) {
@@ -198,10 +225,11 @@ int tsjson_parse_value(tsjson* t, tsjson_token *tok) {
 		tsjson_parse_literal(t, tok, "false");
 	} else if (t->next == EOF) {
 		tsjson_error(t, tok, "Unexpected end of file");
-	} else {
+	} else if (t->next >= 0) {
 		tsjson_error(t, tok, "Unexpected character '%c'", t->next);
 	}
-	return (tok->tag == TSJSON_ERROR) ? -1 : 0;
+
+	return tsjson_emit(t, tok);
 }
 
 int tsjson_parse_dict_entry(tsjson *t, tsjson_token *tok) {
@@ -211,24 +239,20 @@ int tsjson_parse_dict_entry(tsjson *t, tsjson_token *tok) {
 	if        (t->next == '}') {
 		tsjson_consume(t);
 		tok->tag = TSJSON_DICT_TAIL;
-		return 0;
+		return tsjson_emit(t, tok);
 	}
-	if (t->next != '{' && t->next != ',') {
-		tsjson_error(t, tok, "expected ',' after entry");
-		return -1;
-	}
+	if (t->next != '{' && t->next != ',')
+		return tsjson_error(t, tok, "expected ',' after entry");
 	tsjson_consume(t); // { or ,
+
 	tok->tag = TSJSON_DICT_KEY;
 	tsjson_parse_string(t, tok);
-	if (tok->tag == TSJSON_ERROR)
-		return -1;
+
 	tsjson_skipws(t);
-	if (t->next != ':') {
-		tsjson_error(t, tok, "Expected ':' after dictionary key");
-		return -1;
-	}
+	if (t->next != ':')
+		return tsjson_error(t, tok, "Expected ':' after dictionary key");
 	tsjson_consume(t); // ':'
-	return 0;
+	return tsjson_emit(t, tok);
 }
 
 int tsjson_parse_list_entry(tsjson *t, tsjson_token *tok) {
@@ -238,11 +262,11 @@ int tsjson_parse_list_entry(tsjson *t, tsjson_token *tok) {
 	if        (t->next == ']') {
 		tsjson_consume(t);
 		tok->tag = TSJSON_LIST_TAIL;
-		return 0;
+		return tsjson_emit(t, tok);
 	}
 	if (t->next != '[' && t->next != ',') {
-		tsjson_error(t, tok, "expected ',' after entry");
-		return -1;
+		tsjson_error(t, "expected ',' after entry");
+		return tsjson_emit(t, tok);
 	}
 	tsjson_consume(t); // [ or ,
 	return tsjson_parse_value(t, tok);
