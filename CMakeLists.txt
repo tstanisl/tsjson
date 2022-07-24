@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-add_library(tsjson STATIC src/stjson.c)
+add_library(tsjson STATIC src/tsjson.c)
 
 target_include_directories(tsjson PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 target_link_libraries(tsjson PUBLIC)
