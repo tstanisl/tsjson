@@ -177,6 +177,7 @@ static void tsjson_parse_string(tsjson* t, tsjson_token *tok) {
 }
 
 static void tsjson_parse_digits(tsjson* t) {
+	//printf("%s:%d: next=%c\n", __func__, __LINE__, t->next);
 	if (t->next >= EOF && !isdigit(t->next)) {
 		tsjson_error(t, "Expected digit");
 		return;
@@ -186,6 +187,7 @@ static void tsjson_parse_digits(tsjson* t) {
 }
 
 static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
+	//printf("%s:%d: next=%c\n", __func__, __LINE__, t->next);
 	t->pos = 0;
 	if (t->next == '-')
 		tsjson_consume(t);
@@ -193,8 +195,10 @@ static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
 		tsjson_consume(t);
 	else
 		tsjson_parse_digits(t);
-	if (t->next == '.')
+	if (t->next == '.') {
+		tsjson_consume(t);
 		tsjson_parse_digits(t);
+	}
 	if (t->next == 'e' || t->next == 'E') {
 		tsjson_consume(t); // eE
 		if (t->next == '+' || t->next == '-') {
@@ -232,7 +236,7 @@ static void tsjson_parse_value_internal(tsjson* t, tsjson_token *tok) {
 	} else if (t->next == '"') {
 		tok->tag = TSJSON_STRING;
 		tsjson_parse_string(t, tok);
-	} else if (t->next == '-' || isdigit(t->next)) {
+	} else if (t->next == '-' || (t->next >= 0 && isdigit(t->next))) {
 		tok->tag = TSJSON_NUMBER;
 		tsjson_parse_number(t, tok);
 	} else if (t->next == 'n') {
