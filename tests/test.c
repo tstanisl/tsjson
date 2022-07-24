@@ -72,6 +72,47 @@ static void tsjson__parse_literal(tsjson* t, tsjson_token *tok, const char *str)
 }
 
 static void tsjson__parse_string(tsjson* t, tsjson_token *tok) {
+	if (t->next != '"') {
+		tok_error(t, tok, "expected string starting with '\"'");
+		return;
+	}
+	tsjson_consume(t); // "
+	t->pos = 0;
+	do {
+		if      (t->next == '"') {
+			tsjson_consume(t); // "
+			// push null terminator
+			tsjson_putc(tok, 0);
+			tok->str.data = t->buffer;
+			tok->str.len = t->pos;
+			return;
+		else if (t->next == '\\') {
+			tsjson_consume();
+			if        (t->next == 'b') {
+				tsjson_putc(tok, '\b');
+			} else if (t->next == 'n') {
+				tsjson_putc(tok, '\n');
+			} else if (t->next == 'r') {
+				tsjson_putc(tok, '\r');
+			} else if (t->next == 'f') {
+				tsjson_putc(tok, '\f');
+			} else if (t->next == '\\') {
+				tsjson_putc(tok, '\\');
+			} else if (t->next == '/') {
+				tsjson_putc(tok, '/');
+			} else if (t->next == '"') {
+				tsjson_putc(tok, '\"');
+			} else if (t->next == 'u' || t->next == 'U') {
+				tsjson_error(t, tok, "unicode is not supported yet... sorry");
+			} else {
+				tsjson_error(t, tok, "invalid escaped character '%c'", t->next);
+			}
+		} else if (t->next == EOF) {
+			tsjson_error(t, tok, "unexpected end of file");
+		} else {
+			tsjson_putc(tok, t->next);
+		}
+	} while (tok->tag != TSJSON_ERROR);
 }
 
 int tsjson_parse_value(tsjson* t, tsjson_token *tok) {
