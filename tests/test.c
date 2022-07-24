@@ -97,7 +97,7 @@ static void tsjson_consume(tsjson *t) {
 
 static void tsjson_skipws(tsjson* t) {
 	while (t->next >= EOF && isspace(t->next))
-		tsjson_consume(t);
+		tsjson_advance(t);
 }
 
 static void tsjson_error(tsjson* t, const char* fmt, ...) {
@@ -306,6 +306,7 @@ tsjson* tsjson_create(const char *path) {
 	*t = (tsjson) { .buffer = NULL, .col = 1, .line = 1 };
 	t->flp = fopen(path, "r");
 	if (!t->flp) return tsjson_destroy(t), NULL;
+	tsjson_advance(t);
 	return t;
 }
 
@@ -316,6 +317,21 @@ void tsjson_destroy(tsjson* t) {
 	free(t);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+	if (argc < 2) {
+		fprintf(stderr, "Usage:\n\t%s path\n", argv[0]);
+		return -1;
+	}
+	tsjson *t = tsjson_create(argv[1]);
+	if (!t) {
+		fprintf(stderr, "tsjson_create() failed\n");
+		return -1;
+	}
+	tsjson_token tok;
+	int ret = tsjson_parse_value(t, &tok);
+	if (ret != 0) {
+		printf("tok.tag=%d r=%d err=%s\n", tok.tag, tok.line, tok.str.data);
+	}
+	tsjson_destroy(t);
 	return 0;
 }
