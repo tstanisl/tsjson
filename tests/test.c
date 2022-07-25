@@ -19,6 +19,7 @@ void dump_dict(tsjson* t) {
 			dump_value(t, &tok);
 		}
 	}
+	printf("tok.tag=%d r=%d c=%d err=%s\n", tok.tag, tok.line, tok.col, tok.u.str.data);
 	//printf("%s:%d: next=%c err=%s\n", __func__, __LINE__, t->next, tok.u.str.data);
 }
 
@@ -34,6 +35,7 @@ void dump_list(tsjson* t) {
 		dump_value(t, &tok);
 	}
 	//printf("%s:%d: next=%c\n", __func__, __LINE__, t->next);
+	printf("tok.tag=%d r=%d c=%d err=%s\n", tok.tag, tok.line, tok.col, tok.u.str.data);
 }
 
 void dump_value(tsjson* t, tsjson_token* tok) {
@@ -73,6 +75,10 @@ int main(int argc, char *argv[]) {
 	tsjson_parse_value(t, &tok);
 
 	dump_value(t, &tok);
+	if (!tsjson_eof(t)) {
+		fprintf(stderr, "garbage after data\n");
+		return -1;
+	}
 
 	tsjson_destroy(t);
 	return 0;
