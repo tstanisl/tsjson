@@ -1,14 +1,15 @@
 cmake_minimum_required (VERSION 2.8.11)
 project (tsjson)
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 11)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -fsanitize=address,undefined -fanalyzer")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_C_FLAGS "-Wall -Wextra -pedantic")
+set(CMAKE_C_FLAGS_DEBUG "-g -ggdb -fsanitize=address,undefined")
+#set(CMAKE_C_FLAGS_DEBUG "-g -ggdb")
+set(CMAKE_C_FLAGS_RELEASE "-O2")
 
 add_library(tsjson STATIC src/tsjson.c)
 

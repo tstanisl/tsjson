@@ -1,4 +1,4 @@
-#pragma
+#pragma once
 
 enum tsjson_tag {
 	TSJSON_ERROR = 0,
@@ -116,7 +116,7 @@ static void tsjson_error(tsjson* t, const char* fmt, ...) {
 	t->next = TSJSON_ST_SYNTAX_ERROR;
 }
 
-static void tsjson_parse_literal(tsjson* t, tsjson_token *tok, const char *str) {
+static void tsjson_parse_literal(tsjson* t, const char *str) {
 	const char *s = str;
 	while (t->next >= 0 && *s && *s == t->next) {
 		tsjson_advance(t);
@@ -208,10 +208,10 @@ static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
 	}
 	tsjson_putc(t, 0);
 	double num;
-	if (t->next >= EOF && sscanf(t->buffer, "%lf", &num) != 1) {
-		tsjson_error(t, "failed to parse a number from '%s'", t->buffer);
-	} else {
+	if (t->next >= EOF && sscanf(t->buffer, "%lf", &num) == 2) {
 		tok->num = num;
+	} else {
+		tsjson_error(t, "failed to parse a number from '%s'", t->buffer);
 	}
 }
 
@@ -241,13 +241,13 @@ static void tsjson_parse_value_internal(tsjson* t, tsjson_token *tok) {
 		tsjson_parse_number(t, tok);
 	} else if (t->next == 'n') {
 		tok->tag = TSJSON_NULL;
-		tsjson_parse_literal(t, tok, "null");
+		tsjson_parse_literal(t, "null");
 	} else if (t->next == 't') {
 		tok->tag = TSJSON_TRUE;
-		tsjson_parse_literal(t, tok, "true");
+		tsjson_parse_literal(t, "true");
 	} else if (t->next == 'f') {
 		tok->tag = TSJSON_FALSE;
-		tsjson_parse_literal(t, tok, "false");
+		tsjson_parse_literal(t, "false");
 	} else if (t->next == EOF) {
 		tsjson_error(t, "Unexpected end of file");
 	} else if (t->next >= 0) {
