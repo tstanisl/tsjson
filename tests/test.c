@@ -13,13 +13,13 @@ void dump_dict(tsjson* t) {
 			puts("}");
 			return;
 		} else if (tok.tag == TSJSON_DICT_KEY) {
-			printf("key=\"%s\":", tok.str.data);
+			printf("key=\"%s\":", tok.u.str.data);
 			tsjson_parse_value(t, &tok);
 			printf("val=");
 			dump_value(t, &tok);
 		}
 	}
-	//printf("%s:%d: next=%c err=%s\n", __func__, __LINE__, t->next, tok.str.data);
+	//printf("%s:%d: next=%c err=%s\n", __func__, __LINE__, t->next, tok.u.str.data);
 }
 
 void dump_list(tsjson* t) {
@@ -45,9 +45,9 @@ void dump_value(tsjson* t, tsjson_token* tok) {
 	} else if (tok->tag == TSJSON_NULL) {
 		printf("null\n");
 	} else if (tok->tag == TSJSON_NUMBER) {
-		printf("%g\n", tok->num);
+		printf("%g\n", tok->u.num);
 	} else if (tok->tag == TSJSON_STRING) {
-		printf("\"%s\"\n", tok->str.data);
+		printf("\"%s\"\n", tok->u.str.data);
 	} else if (tok->tag == TSJSON_LIST_HEAD) {
 		puts("[");
 		dump_list(t);
@@ -55,7 +55,7 @@ void dump_value(tsjson* t, tsjson_token* tok) {
 		puts("{");
 		dump_dict(t);
 	} else {
-		printf("tok->tag=%d r=%d c=%d err=%s\n", tok->tag, tok->line, tok->col, tok->str.data);
+		printf("tok->tag=%d r=%d c=%d err=%s\n", tok->tag, tok->line, tok->col, tok->u.str.data);
 	}
 }
 

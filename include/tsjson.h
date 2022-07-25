@@ -26,7 +26,7 @@ typedef struct tsjson_token {
 		} str;
 		// valid for TSJSON_NUMBER
 		double num;
-	};
+	} u;
 } tsjson_token;
 
 typedef struct tsjson tsjson;
@@ -140,8 +140,8 @@ static void tsjson_parse_string(tsjson* t, tsjson_token *tok) {
 			//printf("%s:%d: next=%c\n", __func__, __LINE__, t->next);
 			// push null terminator
 			tsjson_putc(t, 0);
-			tok->str.data = t->buffer;
-			tok->str.len = t->pos;
+			tok->u.str.data = t->buffer;
+			tok->u.str.len = t->pos;
 			return;
 		} else if (t->next == '\\') {
 			tsjson_advance(t);
@@ -207,19 +207,20 @@ static void tsjson_parse_number(tsjson* t, tsjson_token *tok) {
 		}
 	}
 	tsjson_putc(t, 0);
-	double num;
-	if (t->next >= EOF && sscanf(t->buffer, "%lf", &num) == 2) {
-		tok->num = num;
-	} else {
-		tsjson_error(t, "failed to parse a number from '%s'", t->buffer);
+	if (t->next >= EOF) {
+		double num;
+		if (sscanf(t->buffer, "%lf", &num) == 1)
+			tok->u.num = num;
+		else
+			tsjson_error(t, "failed to parse a number from '%s'", t->buffer);
 	}
 }
 
 static int tsjson_emit(tsjson* t, tsjson_token *tok) {
 	if (t->next < EOF) {
 		tok->tag = TSJSON_ERROR;
-		tok->str.data = t->err;
-		tok->str.len = strlen(t->err);
+		tok->u.str.data = t->err;
+		tok->u.str.len = strlen(t->err);
 		return -1;
 	}
 	return 0;
